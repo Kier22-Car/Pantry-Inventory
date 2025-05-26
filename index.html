@@ -3,299 +3,212 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pantry Inventory with Firebase</title>
+<title>Pantry Inventory</title>
 <style>
-  body {
-    font-family: Arial, sans-serif;
-    padding: 10px;
-    max-width: 600px;
-    margin: auto;
-    background: #f4f4f9;
-  }
-  h1, h2 {
-    text-align: center;
-  }
-  select, input, button {
-    width: 90%;
-    max-width: 400px;
-    padding: 8px;
-    margin: 8px auto;
-    display: block;
-    font-size: 16px;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-  }
-  th, td {
-    padding: 10px;
-    border: 1px solid #ccc;
-    text-align: center;
-  }
-  th {
-    background: #eee;
-  }
-  .edit-section {
-    background: white;
-    padding: 10px;
-    margin-top: 20px;
-    border: 1px solid #ccc;
-  }
-  @media(max-width: 600px) {
-    table, thead, tbody, tr, th, td {
-      display: block;
-    }
-    th { display: none; }
-    td {
-      position: relative;
-      padding-left: 50%;
-      border: none;
-      border-bottom: 1px solid #ccc;
-      text-align: left;
-    }
-    td::before {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      width: 45%;
-      font-weight: bold;
-      white-space: nowrap;
-    }
-    td:nth-of-type(1)::before { content: "Item"; }
-    td:nth-of-type(2)::before { content: "Quantity"; }
-    td:nth-of-type(3)::before { content: "Last Updated"; }
-    td:nth-of-type(4)::before { content: "Actions"; }
-  }
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 1em; }
+  input, button, select { margin: 0.5em 0; width: 100%; padding: 0.5em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+  th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
 </style>
 </head>
 <body>
 
 <h1>Pantry Inventory</h1>
 
-<h2>Manage Pantries</h2>
-<input type="text" id="newPantryName" placeholder="Pantry Name" />
-<input type="text" id="newPantryLocation" placeholder="Pantry Location" />
-<button onclick="addPantry()">Add Pantry</button>
-
-<select id="pantrySelect"></select>
-
-<h2 id="currentPantryTitle">Select a Pantry</h2>
-
-<h3>Add / Update Item</h3>
-<input type="text" id="itemName" placeholder="Item name" />
-<input type="number" id="itemQuantity" placeholder="Quantity" min="0" />
-<button onclick="addOrUpdateItem()">Add / Update Item</button>
-
-<table id="itemsTable" style="display:none;">
-  <thead>
-    <tr>
-      <th>Item</th><th>Quantity</th><th>Last Updated</th><th>Actions</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
-
-<div class="edit-section" id="editSection" style="display:none;">
-  <h3>Edit Item</h3>
-  <input type="text" id="editItemName" disabled />
-  <input type="number" id="editItemQuantity" min="0" />
-  <button onclick="updateItem()">Update</button>
-  <button onclick="cancelEdit()">Cancel</button>
+<!-- Create Pantry -->
+<div>
+  <h2>Create Pantry</h2>
+  <input type="text" id="pantryName" placeholder="Pantry Name" />
+  <input type="text" id="pantryLocation" placeholder="Pantry Location" />
+  <button onclick="createPantry()">Create Pantry</button>
 </div>
 
-<!-- Firebase App (the core Firebase SDK) -->
+<hr />
+
+<!-- Select Pantry -->
+<div>
+  <h2>Select Pantry</h2>
+  <select id="pantrySelect" onchange="loadItems()">
+    <option value="">-- Select Pantry --</option>
+  </select>
+</div>
+
+<!-- Pantry Items -->
+<div id="itemsSection" style="display:none;">
+  <h2>Items in <span id="selectedPantryName"></span></h2>
+  <table id="itemsTable">
+    <thead>
+      <tr><th>Item Name</th><th>Quantity</th><th>Last Updated</th><th>Actions</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h3>Add / Update Item</h3>
+  <input type="text" id="itemName" placeholder="Item Name" />
+  <input type="number" id="itemQuantity" placeholder="Quantity" min="0" />
+  <button onclick="addOrUpdateItem()">Add / Update Item</button>
+</div>
+
+<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<!-- Firebase Firestore -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
 <script>
-  // TODO: REPLACE with your Firebase config
+  // Your Firebase config here
   const firebaseConfig = {
-  apiKey: "AIzaSyA_KaOOHIUiLiQAznBRib0pv-BQUM-RomE",
-  authDomain: "pantry-inventory-5b75b.firebaseapp.com",
-  projectId: "pantry-inventory-5b75b",
-  storageBucket: "pantry-inventory-5b75b.appspot.com",
-  messagingSenderId: "321691630023",
-  appId: "1:321691630023:web:7167acf95ec95147dbc1e2"
-};
+    apiKey: "AIzaSyA_KaOOHIUiLiQAznBRib0pv-BQUM-RomE",
+    authDomain: "pantry-inventory-5b75b.firebaseapp.com",
+    projectId: "pantry-inventory-5b75b",
+    storageBucket: "pantry-inventory-5b75b.appspot.com",
+    messagingSenderId: "321691630023",
+    appId: "1:321691630023:web:7167acf95ec95147dbc1e2"
+  };
 
-  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
 
-  const pantrySelect = document.getElementById('pantrySelect');
-  const currentPantryTitle = document.getElementById('currentPantryTitle');
-  const itemsTable = document.getElementById('itemsTable');
-  const itemsTbody = itemsTable.querySelector('tbody');
-  const editSection = document.getElementById('editSection');
-  const editItemNameInput = document.getElementById('editItemName');
-  const editItemQuantityInput = document.getElementById('editItemQuantity');
-
-  let pantries = [];
   let currentPantryId = null;
-  let editingItemId = null;
 
-  // Listen to pantry collection changes in realtime
-  function listenPantries() {
-    db.collection('pantries').onSnapshot(snapshot => {
-      pantries = [];
-      pantrySelect.innerHTML = '';
-      snapshot.forEach(doc => {
-        let p = doc.data();
-        p.id = doc.id;
-        pantries.push(p);
-        let option = document.createElement('option');
-        option.value = p.id;
-        option.textContent = `${p.name} (${p.location})`;
-        pantrySelect.appendChild(option);
-      });
-      if (!currentPantryId && pantries.length > 0) {
-        currentPantryId = pantries[0].id;
-      }
-      pantrySelect.value = currentPantryId;
-      showCurrentPantry();
+  // Load pantries into dropdown
+  async function loadPantries() {
+    const pantrySelect = document.getElementById('pantrySelect');
+    pantrySelect.innerHTML = '<option value="">-- Select Pantry --</option>';
+    const snapshot = await db.collection('pantries').get();
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      const option = document.createElement('option');
+      option.value = doc.id;
+      option.textContent = `${p.name} (${p.location})`;
+      pantrySelect.appendChild(option);
     });
   }
 
-  pantrySelect.onchange = () => {
-    currentPantryId = pantrySelect.value;
-    showCurrentPantry();
-  };
-
-  async function addPantry() {
-    const name = document.getElementById('newPantryName').value.trim();
-    const location = document.getElementById('newPantryLocation').value.trim();
+  // Create pantry
+  async function createPantry() {
+    const name = document.getElementById('pantryName').value.trim();
+    const location = document.getElementById('pantryLocation').value.trim();
     if (!name || !location) {
-      alert('Please enter pantry name and location.');
+      alert('Please enter pantry name and location');
       return;
     }
-    await db.collection('pantries').add({
+    const newPantry = {
       name,
       location,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    document.getElementById('newPantryName').value = '';
-    document.getElementById('newPantryLocation').value = '';
+    };
+    const docRef = await db.collection('pantries').add(newPantry);
+    alert(`Pantry "${name}" created`);
+    document.getElementById('pantryName').value = '';
+    document.getElementById('pantryLocation').value = '';
+    loadPantries();
+    document.getElementById('pantrySelect').value = docRef.id;
+    loadItems();
   }
 
-  function showCurrentPantry() {
-    if (!currentPantryId) {
-      currentPantryTitle.textContent = "No pantries available.";
-      itemsTable.style.display = 'none';
+  // Load items for selected pantry
+  async function loadItems() {
+    const pantrySelect = document.getElementById('pantrySelect');
+    const pantryId = pantrySelect.value;
+    currentPantryId = pantryId;
+
+    const itemsSection = document.getElementById('itemsSection');
+    const selectedPantryName = document.getElementById('selectedPantryName');
+    const itemsTbody = document.querySelector('#itemsTable tbody');
+    itemsTbody.innerHTML = '';
+
+    if (!pantryId) {
+      itemsSection.style.display = 'none';
+      selectedPantryName.textContent = '';
       return;
     }
-    let pantry = pantries.find(p => p.id === currentPantryId);
-    currentPantryTitle.textContent = `${pantry.name} (${pantry.location})`;
-    listenItems(currentPantryId);
+    itemsSection.style.display = 'block';
+
+    // Show pantry name
+    const pantryDoc = await db.collection('pantries').doc(pantryId).get();
+    if (!pantryDoc.exists) {
+      alert('Pantry not found!');
+      return;
+    }
+    selectedPantryName.textContent = pantryDoc.data().name;
+
+    // Get items collection inside pantry document
+    const itemsSnapshot = await db.collection('pantries').doc(pantryId).collection('items').get();
+
+    if (itemsSnapshot.empty) {
+      itemsTbody.innerHTML = '<tr><td colspan="4">No items yet</td></tr>';
+      return;
+    }
+
+    itemsSnapshot.forEach(doc => {
+      const item = doc.data();
+      const tr = document.createElement('tr');
+
+      const lastUpdated = item.updatedAt ? item.updatedAt.toDate().toLocaleString() : 'N/A';
+
+      tr.innerHTML = `
+        <td>${item.name}</td>
+        <td>${item.quantity}</td>
+        <td>${lastUpdated}</td>
+        <td><button onclick="startEditItem('${doc.id}', '${item.name}', ${item.quantity})">Edit</button></td>
+      `;
+      itemsTbody.appendChild(tr);
+    });
   }
 
-  let unsubscribeItems = null;
+  let editItemId = null;
 
-  function listenItems(pantryId) {
-    if (unsubscribeItems) unsubscribeItems();
-    itemsTbody.innerHTML = '';
-    itemsTable.style.display = 'none';
-    unsubscribeItems = db.collection('pantries').doc(pantryId).collection('items')
-      .orderBy('updatedAt', 'desc')
-      .onSnapshot(snapshot => {
-        itemsTbody.innerHTML = '';
-        if (snapshot.empty) {
-          itemsTable.style.display = 'none';
-          return;
-        }
-        itemsTable.style.display = 'table';
-        snapshot.forEach(doc => {
-          let item = doc.data();
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${item.name}</td>
-            <td>${item.quantity}</td>
-            <td>${item.updatedAt ? item.updatedAt.toDate().toLocaleString() : 'N/A'}</td>
-            <td>
-              <button onclick="startEditItem('${doc.id}', '${item.name}', ${item.quantity})">Edit</button>
-              <button onclick="deleteItem('${doc.id}')">Delete</button>
-            </td>`;
-          itemsTbody.appendChild(tr);
-        });
-      });
+  // Start editing an item
+  function startEditItem(id, name, quantity) {
+    editItemId = id;
+    document.getElementById('itemName').value = name;
+    document.getElementById('itemName').disabled = true;
+    document.getElementById('itemQuantity').value = quantity;
   }
 
+  // Add or update item
   async function addOrUpdateItem() {
     if (!currentPantryId) {
-      alert("Please select a pantry first.");
+      alert('Please select a pantry first');
       return;
     }
-    const name = document.getElementById('itemName').value.trim();
-    const quantity = parseInt(document.getElementById('itemQuantity').value);
-    if (!name || isNaN(quantity) || quantity < 0) {
-      alert("Please enter a valid item name and quantity.");
+    const nameInput = document.getElementById('itemName');
+    const quantityInput = document.getElementById('itemQuantity');
+
+    const name = nameInput.value.trim();
+    const quantity = parseInt(quantityInput.value);
+
+    if (!name) {
+      alert('Enter item name');
+      return;
+    }
+    if (isNaN(quantity) || quantity < 0) {
+      alert('Enter valid quantity');
       return;
     }
 
-    // Check if item exists in current pantry
-    const pantryRef = db.collection('pantries').doc(currentPantryId);
-    const itemsRef = pantryRef.collection('items');
-    const query = await itemsRef.where('name', '==', name).get();
+    const itemRef = editItemId
+      ? db.collection('pantries').doc(currentPantryId).collection('items').doc(editItemId)
+      : db.collection('pantries').doc(currentPantryId).collection('items').doc(name);
 
-    if (!query.empty) {
-      // Update existing item quantity
-      const itemDoc = query.docs[0];
-      await itemDoc.ref.update({
-        quantity,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    } else {
-      // Add new item
-      await itemsRef.add({
-        name,
-        quantity,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-
-    document.getElementById('itemName').value = '';
-    document.getElementById('itemQuantity').value = '';
-  }
-
-  function startEditItem(id, name, quantity) {
-    editingItemId = id;
-    editItemNameInput.value = name;
-    editItemQuantityInput.value = quantity;
-    editSection.style.display = 'block';
-  }
-
-  async function updateItem() {
-    const newQty = parseInt(editItemQuantityInput.value);
-    if (isNaN(newQty) || newQty < 0) {
-      alert("Enter a valid quantity");
-      return;
-    }
-    if (!editingItemId || !currentPantryId) return;
-
-    const itemRef = db.collection('pantries').doc(currentPantryId)
-      .collection('items').doc(editingItemId);
-    await itemRef.update({
-      quantity: newQty,
+    await itemRef.set({
+      name,
+      quantity,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    editingItemId = null;
-    editSection.style.display = 'none';
+    alert(editItemId ? 'Item updated' : 'Item added');
+
+    // Reset input
+    editItemId = null;
+    nameInput.value = '';
+    nameInput.disabled = false;
+    quantityInput.value = '';
+
+    loadItems();
   }
 
-  function cancelEdit() {
-    editingItemId = null;
-    editSection.style.display = 'none';
-  }
-
-  async function deleteItem(id) {
-    if (!confirm("Delete this item?")) return;
-    await db.collection('pantries').doc(currentPantryId).collection('items').doc(id).delete();
-  }
-
-  // Start listening for pantries on load
-  listenPantries();
+  // Initial load of pantries
+  loadPantries();
 
 </script>
 
