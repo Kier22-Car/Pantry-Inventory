@@ -1,234 +1,302 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Pantry Inventory</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 10px;
-      background-color: #f9f9f9;
-    }
-
-    h1, h2 {
-      text-align: center;
-    }
-
-    select, input, button {
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pantry Inventory with Firebase</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    padding: 10px;
+    max-width: 600px;
+    margin: auto;
+    background: #f4f4f9;
+  }
+  h1, h2 {
+    text-align: center;
+  }
+  select, input, button {
+    width: 90%;
+    max-width: 400px;
+    padding: 8px;
+    margin: 8px auto;
+    display: block;
+    font-size: 16px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+  }
+  th, td {
+    padding: 10px;
+    border: 1px solid #ccc;
+    text-align: center;
+  }
+  th {
+    background: #eee;
+  }
+  .edit-section {
+    background: white;
+    padding: 10px;
+    margin-top: 20px;
+    border: 1px solid #ccc;
+  }
+  @media(max-width: 600px) {
+    table, thead, tbody, tr, th, td {
       display: block;
-      margin: 10px auto;
-      padding: 10px;
-      width: 90%;
-      max-width: 400px;
-      box-sizing: border-box;
-      font-size: 16px;
     }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-      background: white;
+    th { display: none; }
+    td {
+      position: relative;
+      padding-left: 50%;
+      border: none;
+      border-bottom: 1px solid #ccc;
+      text-align: left;
     }
-
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
+    td::before {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      width: 45%;
+      font-weight: bold;
+      white-space: nowrap;
     }
-
-    th {
-      background-color: #eee;
-    }
-
-    .edit-form {
-      background: #fff;
-      border: 1px solid #ccc;
-      padding: 15px;
-      margin-top: 20px;
-      display: none;
-    }
-
-    .edit-form h3 {
-      margin-top: 0;
-    }
-
-    @media (max-width: 600px) {
-      table, thead, tbody, th, td, tr {
-        display: block;
-      }
-
-      th {
-        display: none;
-      }
-
-      td {
-        border: none;
-        position: relative;
-        padding-left: 50%;
-      }
-
-      td::before {
-        position: absolute;
-        top: 8px;
-        left: 8px;
-        width: 45%;
-        white-space: nowrap;
-        font-weight: bold;
-      }
-
-      td:nth-of-type(1)::before { content: "Item"; }
-      td:nth-of-type(2)::before { content: "Quantity"; }
-      td:nth-of-type(3)::before { content: "Actions"; }
-    }
-  </style>
+    td:nth-of-type(1)::before { content: "Item"; }
+    td:nth-of-type(2)::before { content: "Quantity"; }
+    td:nth-of-type(3)::before { content: "Last Updated"; }
+    td:nth-of-type(4)::before { content: "Actions"; }
+  }
+</style>
 </head>
 <body>
 
 <h1>Pantry Inventory</h1>
 
+<h2>Manage Pantries</h2>
+<input type="text" id="newPantryName" placeholder="Pantry Name" />
+<input type="text" id="newPantryLocation" placeholder="Pantry Location" />
+<button onclick="addPantry()">Add Pantry</button>
+
 <select id="pantrySelect"></select>
 
-<h2 id="currentPantryTitle"></h2>
+<h2 id="currentPantryTitle">Select a Pantry</h2>
 
+<h3>Add / Update Item</h3>
 <input type="text" id="itemName" placeholder="Item name" />
-<input type="number" id="itemQty" placeholder="Quantity" min="1" />
-<button onclick="addItem()">Add Item</button>
+<input type="number" id="itemQuantity" placeholder="Quantity" min="0" />
+<button onclick="addOrUpdateItem()">Add / Update Item</button>
 
-<table id="itemTable" style="display:none;">
+<table id="itemsTable" style="display:none;">
   <thead>
-    <tr><th>Item</th><th>Quantity</th><th>Actions</th></tr>
+    <tr>
+      <th>Item</th><th>Quantity</th><th>Last Updated</th><th>Actions</th>
+    </tr>
   </thead>
   <tbody></tbody>
 </table>
 
-<div class="edit-form" id="editForm">
+<div class="edit-section" id="editSection" style="display:none;">
   <h3>Edit Item</h3>
   <input type="text" id="editItemName" disabled />
-  <input type="number" id="editItemQty" />
+  <input type="number" id="editItemQuantity" min="0" />
   <button onclick="updateItem()">Update</button>
   <button onclick="cancelEdit()">Cancel</button>
 </div>
 
-<script>
-  const data = {
-    pantries: [
-      { id: '1', name: 'Pantry A', location: 'Riyadh', items: [] },
-      { id: '2', name: 'Pantry B', location: 'Jeddah', items: [] }
-    ]
-  };
+<!-- Firebase App (the core Firebase SDK) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<!-- Firebase Firestore -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
-  let currentPantryId = localStorage.getItem('currentPantryId') || '1';
-  let editIndex = null;
+<script>
+  // TODO: REPLACE with your Firebase config
+  const firebaseConfig = {
+  apiKey: "AIzaSyA_KaOOHIUiLiQAznBRib0pv-BQUM-RomE",
+  authDomain: "pantry-inventory-5b75b.firebaseapp.com",
+  projectId: "pantry-inventory-5b75b",
+  storageBucket: "pantry-inventory-5b75b.appspot.com",
+  messagingSenderId: "321691630023",
+  appId: "1:321691630023:web:7167acf95ec95147dbc1e2"
+};
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
 
   const pantrySelect = document.getElementById('pantrySelect');
   const currentPantryTitle = document.getElementById('currentPantryTitle');
-  const itemTable = document.getElementById('itemTable');
-  const editForm = document.getElementById('editForm');
+  const itemsTable = document.getElementById('itemsTable');
+  const itemsTbody = itemsTable.querySelector('tbody');
+  const editSection = document.getElementById('editSection');
+  const editItemNameInput = document.getElementById('editItemName');
+  const editItemQuantityInput = document.getElementById('editItemQuantity');
 
-  function populatePantrySelect() {
-    pantrySelect.innerHTML = '';
-    data.pantries.forEach(p => {
-      const option = document.createElement('option');
-      option.value = p.id;
-      option.textContent = `${p.name} (${p.location})`;
-      pantrySelect.appendChild(option);
+  let pantries = [];
+  let currentPantryId = null;
+  let editingItemId = null;
+
+  // Listen to pantry collection changes in realtime
+  function listenPantries() {
+    db.collection('pantries').onSnapshot(snapshot => {
+      pantries = [];
+      pantrySelect.innerHTML = '';
+      snapshot.forEach(doc => {
+        let p = doc.data();
+        p.id = doc.id;
+        pantries.push(p);
+        let option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = `${p.name} (${p.location})`;
+        pantrySelect.appendChild(option);
+      });
+      if (!currentPantryId && pantries.length > 0) {
+        currentPantryId = pantries[0].id;
+      }
+      pantrySelect.value = currentPantryId;
+      showCurrentPantry();
     });
-    pantrySelect.value = currentPantryId;
   }
 
-  pantrySelect.onchange = function () {
+  pantrySelect.onchange = () => {
     currentPantryId = pantrySelect.value;
-    localStorage.setItem('currentPantryId', currentPantryId);
     showCurrentPantry();
   };
 
-  function showCurrentPantry() {
-    const pantry = data.pantries.find(p => p.id === currentPantryId);
-    if (pantry) {
-      currentPantryTitle.textContent = `${pantry.name} (${pantry.location})`;
-      renderItems();
+  async function addPantry() {
+    const name = document.getElementById('newPantryName').value.trim();
+    const location = document.getElementById('newPantryLocation').value.trim();
+    if (!name || !location) {
+      alert('Please enter pantry name and location.');
+      return;
     }
+    await db.collection('pantries').add({
+      name,
+      location,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById('newPantryName').value = '';
+    document.getElementById('newPantryLocation').value = '';
   }
 
-  function renderItems() {
-    const pantry = data.pantries.find(p => p.id === currentPantryId);
-    const tbody = itemTable.querySelector('tbody');
-    tbody.innerHTML = '';
+  function showCurrentPantry() {
+    if (!currentPantryId) {
+      currentPantryTitle.textContent = "No pantries available.";
+      itemsTable.style.display = 'none';
+      return;
+    }
+    let pantry = pantries.find(p => p.id === currentPantryId);
+    currentPantryTitle.textContent = `${pantry.name} (${pantry.location})`;
+    listenItems(currentPantryId);
+  }
 
-    if (pantry.items.length === 0) {
-      itemTable.style.display = 'none';
+  let unsubscribeItems = null;
+
+  function listenItems(pantryId) {
+    if (unsubscribeItems) unsubscribeItems();
+    itemsTbody.innerHTML = '';
+    itemsTable.style.display = 'none';
+    unsubscribeItems = db.collection('pantries').doc(pantryId).collection('items')
+      .orderBy('updatedAt', 'desc')
+      .onSnapshot(snapshot => {
+        itemsTbody.innerHTML = '';
+        if (snapshot.empty) {
+          itemsTable.style.display = 'none';
+          return;
+        }
+        itemsTable.style.display = 'table';
+        snapshot.forEach(doc => {
+          let item = doc.data();
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${item.name}</td>
+            <td>${item.quantity}</td>
+            <td>${item.updatedAt ? item.updatedAt.toDate().toLocaleString() : 'N/A'}</td>
+            <td>
+              <button onclick="startEditItem('${doc.id}', '${item.name}', ${item.quantity})">Edit</button>
+              <button onclick="deleteItem('${doc.id}')">Delete</button>
+            </td>`;
+          itemsTbody.appendChild(tr);
+        });
+      });
+  }
+
+  async function addOrUpdateItem() {
+    if (!currentPantryId) {
+      alert("Please select a pantry first.");
+      return;
+    }
+    const name = document.getElementById('itemName').value.trim();
+    const quantity = parseInt(document.getElementById('itemQuantity').value);
+    if (!name || isNaN(quantity) || quantity < 0) {
+      alert("Please enter a valid item name and quantity.");
       return;
     }
 
-    itemTable.style.display = 'table';
+    // Check if item exists in current pantry
+    const pantryRef = db.collection('pantries').doc(currentPantryId);
+    const itemsRef = pantryRef.collection('items');
+    const query = await itemsRef.where('name', '==', name).get();
 
-    pantry.items.forEach((item, index) => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${item.name}</td>
-        <td>${item.quantity}</td>
-        <td>
-          <button onclick="editItem(${index})">Edit</button>
-          <button onclick="deleteItem(${index})">Delete</button>
-        </td>`;
-      tbody.appendChild(row);
-    });
-  }
-
-  function addItem() {
-    const name = document.getElementById('itemName').value.trim();
-    const qty = parseInt(document.getElementById('itemQty').value);
-    if (!name || isNaN(qty) || qty <= 0) return;
-
-    const pantry = data.pantries.find(p => p.id === currentPantryId);
-    const existing = pantry.items.find(item => item.name.toLowerCase() === name.toLowerCase());
-
-    if (existing) {
-      existing.quantity += qty;
+    if (!query.empty) {
+      // Update existing item quantity
+      const itemDoc = query.docs[0];
+      await itemDoc.ref.update({
+        quantity,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
     } else {
-      pantry.items.push({ name, quantity: qty });
+      // Add new item
+      await itemsRef.add({
+        name,
+        quantity,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
     }
 
     document.getElementById('itemName').value = '';
-    document.getElementById('itemQty').value = '';
-    renderItems();
+    document.getElementById('itemQuantity').value = '';
   }
 
-  function deleteItem(index) {
-    const pantry = data.pantries.find(p => p.id === currentPantryId);
-    pantry.items.splice(index, 1);
-    renderItems();
+  function startEditItem(id, name, quantity) {
+    editingItemId = id;
+    editItemNameInput.value = name;
+    editItemQuantityInput.value = quantity;
+    editSection.style.display = 'block';
   }
 
-  function editItem(index) {
-    const pantry = data.pantries.find(p => p.id === currentPantryId);
-    const item = pantry.items[index];
-    document.getElementById('editItemName').value = item.name;
-    document.getElementById('editItemQty').value = item.quantity;
-    editForm.style.display = 'block';
-    editIndex = index;
-  }
-
-  function updateItem() {
-    const pantry = data.pantries.find(p => p.id === currentPantryId);
-    const newQty = parseInt(document.getElementById('editItemQty').value);
-    if (!isNaN(newQty) && newQty >= 0) {
-      pantry.items[editIndex].quantity = newQty;
-      editForm.style.display = 'none';
-      renderItems();
+  async function updateItem() {
+    const newQty = parseInt(editItemQuantityInput.value);
+    if (isNaN(newQty) || newQty < 0) {
+      alert("Enter a valid quantity");
+      return;
     }
+    if (!editingItemId || !currentPantryId) return;
+
+    const itemRef = db.collection('pantries').doc(currentPantryId)
+      .collection('items').doc(editingItemId);
+    await itemRef.update({
+      quantity: newQty,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    editingItemId = null;
+    editSection.style.display = 'none';
   }
 
   function cancelEdit() {
-    editForm.style.display = 'none';
-    editIndex = null;
+    editingItemId = null;
+    editSection.style.display = 'none';
   }
 
-  // Initialize
-  populatePantrySelect();
-  showCurrentPantry();
+  async function deleteItem(id) {
+    if (!confirm("Delete this item?")) return;
+    await db.collection('pantries').doc(currentPantryId).collection('items').doc(id).delete();
+  }
+
+  // Start listening for pantries on load
+  listenPantries();
+
 </script>
 
 </body>
