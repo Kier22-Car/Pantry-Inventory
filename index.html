@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pantry Inventory Website</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    nav {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    nav button {
+      margin: 0 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+    section {
+      display: none;
+    }
+    section.active {
+      display: block;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 8px;
+      text-align: left;
+    }
+    input[type="text"], input[type="number"] {
+      padding: 5px;
+      margin-right: 10px;
+    }
+    .error {
+      color: red;
+    }
+    form > * {
+      margin: 5px 0;
+    }
+    #pantryList {
+      margin-bottom: 15px;
+    }
+    select {
+      padding: 5px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Pantry Inventory Website</h1>
+
+<nav>
+  <button id="btnManage">Manage Individual Pantry</button>
+  <button id="btnOverview">All Pantries Overview</button>
+  <button id="btnSupply">Supply Inventory</button>
+</nav>
+
+<!-- Manage Pantry Section -->
+<section id="sectionManage" class="active">
+
+  <div id="pantryCreationDiv">
+    <h2>Create New Pantry</h2>
+    <form id="createPantryForm">
+      <input type="text" id="pantryName" placeholder="Your Name" required />
+      <input type="text" id="pantryLocation" placeholder="Pantry Location" required />
+      <button type="submit">Create Pantry</button>
+    </form>
+  </div>
+
+  <div id="managePantryDiv" style="display:none;">
+    <h2>Manage Pantry: <span id="currentPantryTitle"></span></h2>
+    <button id="btnSwitchPantry">Switch Pantry</button>
+
+    <h3>Add or Remove Items</h3>
+    <form id="updateItemForm">
+      <input type="text" id="itemNameInput" placeholder="Item Name" required />
+      <input type="number" id="itemQtyInput" placeholder="Quantity (+/-)" required />
+      <button type="submit">Update Item</button>
+    </form>
+
+    <h3>Current Items</h3>
+    <table id="pantryItemsTable">
+      <thead>
+        <tr><th>Item</th><th>Quantity</th><th>Last Updated</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Overview Section -->
+<section id="sectionOverview">
+  <h2>All Pantries Overview (Read-Only)</h2>
+  <table id="overviewTable">
+    <thead>
+      <tr><th>Item</th><th>Total Quantity</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<!-- Supply Section -->
+<section id="sectionSupply">
+  <h2>Supply Inventory</h2>
+  <form id="addSupplyForm">
+    <input type="text" id="supplyItemName" placeholder="Item Name" required />
+    <input type="number" id="supplyQty" placeholder="Quantity to Add" min="1" required />
+    <button type="submit">Add to Supply</button>
+  </form>
+  <h3>Current Supply Stock</h3>
+  <table id="supplyTable">
+    <thead>
+      <tr><th>Item</th><th>Quantity</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<script>
+  // Utility to get today's date as yyyy-mm-dd
+  function today() {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  // Local Storage keys
+  const STORAGE_KEY = 'pantryInventoryData';
+
+  // Load data or initialize
+  let data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+    pantries: [],  // [{id, name, location, items: [{name, qty, lastUpdated}]}]
+    supply: []     // [{name, qty}]
+  };
+
+  // Current selected pantry ID
+  let currentPantryId = null;
+
+  // DOM elements
+  const btnManage = document.getElementById('btnManage');
+  const btnOverview = document.getElementById('btnOverview');
+  const btnSupply = document.getElementById('btnSupply');
+
+  const sectionManage = document.getElementById('sectionManage');
+  const sectionOverview = document.getElementById('sectionOverview');
+  const sectionSupply = document.getElementById('sectionSupply');
+
+  const pantryCreationDiv = document.getElementById('pantryCreationDiv');
+  const managePantryDiv = document.getElementById('managePantryDiv');
+  const currentPantryTitle = document.getElementById('currentPantryTitle');
+  const pantryItemsTableBody = document.querySelector('#pantryItemsTable tbody');
+
+  const overviewTableBody = document.querySelector('#overviewTable tbody');
+  const supplyTableBody = document.querySelector('#supplyTable tbody');
+
+  const createPantryForm = document.getElementById('createPantryForm');
+  const updateItemForm = document.getElementById('updateItemForm');
+  const addSupplyForm = document.getElementById('addSupplyForm');
+  const btnSwitchPantry = document.getElementById('btnSwitchPantry');
+
+  // Switch visible section
+  function showSection(section) {
+    sectionManage.classList.remove('active');
+    sectionOverview.classList.remove('active');
+    sectionSupply.classList.remove('active');
+    section.classList.add('active');
+  }
+
+  // Save data to localStorage
+  function saveData() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  // Generate unique ID for pantries
+  function generateId() {
+    return Date.now() + Math.random().toString(16).slice(2);
+  }
+
+  // Render pantry items table for current pantry
+  function renderPantryItems() {
+    const pantry = data.pantries.find(p => p.id === currentPantryId);
+    pantryItemsTableBody.innerHTML = '';
+    if (!pantry || pantry.items.length === 0) {
+      pantryItemsTableBody.innerHTML = '<tr><td colspan="3">No items yet</td></tr>';
+      return;
+    }
+    pantry.items.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${item.name}</td><td>${item.qty}</td><td>${item.lastUpdated}</td>`;
+      pantryItemsTableBody.appendChild(tr);
+    });
+  }
+
+  // Render overview table (combined quantities)
+  function renderOverview() {
+    const combined = {};
+    data.pantries.forEach(pantry => {
+      pantry.items.forEach(item => {
+        combined[item.name] = (combined[item.name] || 0) + item.qty;
+      });
+    });
+
+    overviewTableBody.innerHTML = '';
+    const names = Object.keys(combined);
+    if (names.length === 0) {
+      overviewTableBody.innerHTML = '<tr><td colspan="2">No items in inventory</td></tr>';
+      return;
+    }
+
+    names.forEach(name => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${name}</td><td>${combined[name]}</td>`;
+      overviewTableBody.appendChild(tr);
+    });
+  }
+
+  // Render supply inventory table
+  function renderSupply() {
+    supplyTableBody.innerHTML = '';
+    if (data.supply.length === 0) {
+      supplyTableBody.innerHTML = '<tr><td colspan="2">No supply items</td></tr>';
+      return;
+    }
+    data.supply.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${item.name}</td><td>${item.qty}</td>`;
+      supplyTableBody.appendChild(tr);
+    });
+  }
+
+  // Update supply stock, qtyChange can be positive or negative
+  function updateSupplyStock(itemName, qtyChange) {
+    const idx = data.supply.findIndex(i => i.name.toLowerCase() === itemName.toLowerCase());
+    if (idx === -1 && qtyChange > 0) {
+      data.supply.push({ name: itemName, qty: qtyChange });
+      return true;
+    } else if (idx !== -1) {
+      const newQty = data.supply[idx].qty + qtyChange;
+      if (newQty < 0) {
+        alert("Supply stock can't be negative!");
+        return false;
+      }
+      if (newQty === 0) {
+        data.supply.splice(idx, 1);
+      } else {
+        data.supply[idx].qty = newQty;
+      }
+      return true;
+    } else {
+      alert("Not enough supply stock to remove!");
+      return false;
+    }
+  }
+
+  // Add or remove item quantity in pantry
+  function updatePantryItem(itemName, qtyChange) {
+    const pantry = data.pantries.find(p => p.id === currentPantryId);
+    if (!pantry) return;
+
+    const idx = pantry.items.findIndex(i => i.name.toLowerCase() === itemName.toLowerCase());
+
+    if (idx === -1 && qtyChange > 0) {
+      // New item
+      pantry.items.push({ name: itemName, qty: qtyChange, lastUpdated: today() });
+    } else if (idx !== -1) {
+      const newQty = pantry.items[idx].qty + qtyChange;
+      if (newQty < 0) {
+        alert("Cannot have negative quantity in pantry!");
+        return false;
+      } else if (newQty === 0) {
+        pantry.items.splice(idx, 1);
+      } else {
+        pantry.items[idx].qty = newQty;
+        pantry.items[idx].lastUpdated = today();
+      }
+    } else {
+      alert("Cannot remove non-existing item");
+      return false;
+    }
+
+    return true;
+  }
+
+  // UI event handlers
+  btnManage.onclick = () => {
+    showSection(sectionManage);
+  };
+  btnOverview.onclick = () => {
+    showSection(sectionOverview);
+    renderOverview();
+  };
+  btnSupply.onclick = () => {
+    showSection(sectionSupply);
+    renderSupply();
+  };
+
+  // Pantry creation form submit
+  createPantryForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const name = document.getElementById('pantryName').value.trim();
+    const location = document.getElementById('pantryLocation').value.trim();
+    if (!name || !location) {
+      alert('Please enter both name and pantry location.');
+      return;
+    }
+    const id = generateId();
+    data.pantries.push({ id, name, location, items: [] });
+    currentPantryId = id;
+    saveData();
+    showManagePantryUI();
+  });
+
+  // Update item form submit (add or remove item qty)
+  updateItemForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const itemName = document.getElementById('itemNameInput').value.trim();
+    let qty = Number(document.getElementById('itemQtyInput').value);
+    if (!itemName || isNaN(qty) || qty === 0) {
+      alert("Please enter a valid item name and non-zero quantity.");
+      return;
+    }
+
+    // If qty > 0, it means pantry restocks item => supply must decrease accordingly
+    if (qty > 0) {
+      const supplyUpdated = updateSupplyStock(itemName, -qty);
+      if (!supplyUpdated) {
+        return; // stop if supply not enough
+      }
+    }
+
+    const pantryUpdated = updatePantryItem(itemName, qty);
+    if (!pantryUpdated) {
+      // If pantry update failed (like negative qty), revert supply update if done
+      if (qty > 0) {
+        updateSupplyStock(itemName, qty); // revert supply deduction
+      }
+      return;
+    }
+
+    saveData();
+    renderPantryItems();
+    renderSupply();
+
+    // Clear inputs
+    updateItemForm.reset();
+  });
+
+  // Supply add form submit
+  addSupplyForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const itemName = document.getElementById('supplyItemName').value.trim();
+    const qty = Number(document.getElementById('supplyQty').value);
+    if (!itemName || isNaN(qty) || qty <= 0) {
+      alert("Enter valid item name and positive quantity.");
+      return;
+    }
+    updateSupplyStock(itemName, qty);
+    saveData();
+    renderSupply();
+    addSupplyForm.reset();
+  });
+
+  btnSwitchPantry.addEventListener('click', () => {
+    currentPantryId = null;
+    showManagePantryUI();
+  });
+
+  // Show UI for managing pantry or pantry creation depending on currentPantryId
+  function showManagePantryUI() {
+    if (!currentPantryId) {
+      pantryCreationDiv.style.display = 'block';
+      managePantryDiv.style.display = 'none';
+      currentPantryTitle.textContent = '';
+    } else {
+      pantryCreationDiv.style.display = 'none';
+      managePantryDiv.style.display = 'block';
+      const pantry = data.pantries.find(p => p.id === currentPantryId);
+      currentPantryTitle.textContent = `${pantry.name} (${pantry.location})`;
+      renderPantryItems();
+    }
+  }
+
+  // On page load, show Manage Pantry UI
+  showManagePantryUI();
+
+</script>
+
+</body>
+</html>
