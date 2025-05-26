@@ -1,215 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pantry Inventory</title>
-<style>
-  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 1em; }
-  input, button, select { margin: 0.5em 0; width: 100%; padding: 0.5em; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1em; }
-  th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pantry Inventory System</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0; padding: 0;
+      background: #f4f4f4;
+    }
+    header {
+      background: #333;
+      color: white;
+      padding: 1em;
+      text-align: center;
+    }
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 1em;
+      margin-top: 1em;
+    }
+    nav button {
+      padding: 0.5em 1em;
+      font-size: 1em;
+      cursor: pointer;
+    }
+    .section {
+      display: none;
+      padding: 1em;
+      background: white;
+      margin: 1em auto;
+      max-width: 800px;
+      border-radius: 5px;
+    }
+    .section.active {
+      display: block;
+    }
+    h2 {
+      margin-top: 0;
+    }
+    .pantry-list, .item-list {
+      margin-top: 1em;
+    }
+    .pantry-card {
+      background: #e9e9e9;
+      padding: 1em;
+      margin-bottom: 1em;
+      border-radius: 5px;
+    }
+  </style>
 </head>
 <body>
 
-<h1>Pantry Inventory</h1>
+<header>
+  <h1>Pantry Inventory System</h1>
+</header>
 
-<!-- Create Pantry -->
-<div>
-  <h2>Create Pantry</h2>
-  <input type="text" id="pantryName" placeholder="Pantry Name" />
-  <input type="text" id="pantryLocation" placeholder="Pantry Location" />
-  <button onclick="createPantry()">Create Pantry</button>
-</div>
+<nav>
+  <button onclick="showSection('individual')">Manage Individual Pantry</button>
+  <button onclick="showSection('team')">Team Inventory Viewer</button>
+  <button onclick="showSection('supply')">Supply Inventory</button>
+</nav>
 
-<hr />
+<!-- Individual Pantry Page -->
+<section id="individual" class="section">
+  <h2>Individual Pantries</h2>
+  <button>Create New Pantry</button>
 
-<!-- Select Pantry -->
-<div>
-  <h2>Select Pantry</h2>
-  <select id="pantrySelect" onchange="loadItems()">
-    <option value="">-- Select Pantry --</option>
-  </select>
-</div>
+  <div class="pantry-list">
+    <h3>My Pantries</h3>
+    <!-- Placeholder for created pantries -->
+    <div class="pantry-card">
+      <strong>Pantry Name</strong><br />
+      Location: Example Location<br />
+      <button>Add Item</button>
+      <button>Edit Items</button>
+    </div>
+    <!-- Add more dynamically -->
+  </div>
+</section>
 
-<!-- Pantry Items -->
-<div id="itemsSection" style="display:none;">
-  <h2>Items in <span id="selectedPantryName"></span></h2>
-  <table id="itemsTable">
-    <thead>
-      <tr><th>Item Name</th><th>Quantity</th><th>Last Updated</th><th>Actions</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<!-- Team Inventory Page -->
+<section id="team" class="section">
+  <h2>Team Inventory (View Only)</h2>
+  <div class="item-list">
+    <div class="pantry-card">
+      <strong>Pantry: Example Pantry</strong><br />
+      Location: Team Location<br />
+      Items:
+      <ul>
+        <li>Rice - 10 units</li>
+        <li>Beans - 5 units</li>
+      </ul>
+    </div>
+    <!-- Add more dynamically -->
+  </div>
+</section>
 
-  <h3>Add / Update Item</h3>
-  <input type="text" id="itemName" placeholder="Item Name" />
-  <input type="number" id="itemQuantity" placeholder="Quantity" min="0" />
-  <button onclick="addOrUpdateItem()">Add / Update Item</button>
-</div>
+<!-- Supply Inventory Page -->
+<section id="supply" class="section">
+  <h2>Supply Inventory</h2>
+  <button>Add Supply Item</button>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <div class="item-list">
+    <div class="pantry-card">
+      <strong>Item: Rice</strong><br />
+      Stock: 50 units
+      <br />
+      <button>Distribute to Pantry</button>
+    </div>
+    <!-- Add more dynamically -->
+  </div>
+</section>
 
 <script>
-  // Your Firebase config here
-  const firebaseConfig = {
-    apiKey: "AIzaSyA_KaOOHIUiLiQAznBRib0pv-BQUM-RomE",
-    authDomain: "pantry-inventory-5b75b.firebaseapp.com",
-    projectId: "pantry-inventory-5b75b",
-    storageBucket: "pantry-inventory-5b75b.appspot.com",
-    messagingSenderId: "321691630023",
-    appId: "1:321691630023:web:7167acf95ec95147dbc1e2"
-  };
-
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-
-  let currentPantryId = null;
-
-  // Load pantries into dropdown
-  async function loadPantries() {
-    const pantrySelect = document.getElementById('pantrySelect');
-    pantrySelect.innerHTML = '<option value="">-- Select Pantry --</option>';
-    const snapshot = await db.collection('pantries').get();
-    snapshot.forEach(doc => {
-      const p = doc.data();
-      const option = document.createElement('option');
-      option.value = doc.id;
-      option.textContent = `${p.name} (${p.location})`;
-      pantrySelect.appendChild(option);
-    });
+  function showSection(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
   }
 
-  // Create pantry
-  async function createPantry() {
-    const name = document.getElementById('pantryName').value.trim();
-    const location = document.getElementById('pantryLocation').value.trim();
-    if (!name || !location) {
-      alert('Please enter pantry name and location');
-      return;
-    }
-    const newPantry = {
-      name,
-      location,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    const docRef = await db.collection('pantries').add(newPantry);
-    alert(`Pantry "${name}" created`);
-    document.getElementById('pantryName').value = '';
-    document.getElementById('pantryLocation').value = '';
-    loadPantries();
-    document.getElementById('pantrySelect').value = docRef.id;
-    loadItems();
-  }
-
-  // Load items for selected pantry
-  async function loadItems() {
-    const pantrySelect = document.getElementById('pantrySelect');
-    const pantryId = pantrySelect.value;
-    currentPantryId = pantryId;
-
-    const itemsSection = document.getElementById('itemsSection');
-    const selectedPantryName = document.getElementById('selectedPantryName');
-    const itemsTbody = document.querySelector('#itemsTable tbody');
-    itemsTbody.innerHTML = '';
-
-    if (!pantryId) {
-      itemsSection.style.display = 'none';
-      selectedPantryName.textContent = '';
-      return;
-    }
-    itemsSection.style.display = 'block';
-
-    // Show pantry name
-    const pantryDoc = await db.collection('pantries').doc(pantryId).get();
-    if (!pantryDoc.exists) {
-      alert('Pantry not found!');
-      return;
-    }
-    selectedPantryName.textContent = pantryDoc.data().name;
-
-    // Get items collection inside pantry document
-    const itemsSnapshot = await db.collection('pantries').doc(pantryId).collection('items').get();
-
-    if (itemsSnapshot.empty) {
-      itemsTbody.innerHTML = '<tr><td colspan="4">No items yet</td></tr>';
-      return;
-    }
-
-    itemsSnapshot.forEach(doc => {
-      const item = doc.data();
-      const tr = document.createElement('tr');
-
-      const lastUpdated = item.updatedAt ? item.updatedAt.toDate().toLocaleString() : 'N/A';
-
-      tr.innerHTML = `
-        <td>${item.name}</td>
-        <td>${item.quantity}</td>
-        <td>${lastUpdated}</td>
-        <td><button onclick="startEditItem('${doc.id}', '${item.name}', ${item.quantity})">Edit</button></td>
-      `;
-      itemsTbody.appendChild(tr);
-    });
-  }
-
-  let editItemId = null;
-
-  // Start editing an item
-  function startEditItem(id, name, quantity) {
-    editItemId = id;
-    document.getElementById('itemName').value = name;
-    document.getElementById('itemName').disabled = true;
-    document.getElementById('itemQuantity').value = quantity;
-  }
-
-  // Add or update item
-  async function addOrUpdateItem() {
-    if (!currentPantryId) {
-      alert('Please select a pantry first');
-      return;
-    }
-    const nameInput = document.getElementById('itemName');
-    const quantityInput = document.getElementById('itemQuantity');
-
-    const name = nameInput.value.trim();
-    const quantity = parseInt(quantityInput.value);
-
-    if (!name) {
-      alert('Enter item name');
-      return;
-    }
-    if (isNaN(quantity) || quantity < 0) {
-      alert('Enter valid quantity');
-      return;
-    }
-
-    const itemRef = editItemId
-      ? db.collection('pantries').doc(currentPantryId).collection('items').doc(editItemId)
-      : db.collection('pantries').doc(currentPantryId).collection('items').doc(name);
-
-    await itemRef.set({
-      name,
-      quantity,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    alert(editItemId ? 'Item updated' : 'Item added');
-
-    // Reset input
-    editItemId = null;
-    nameInput.value = '';
-    nameInput.disabled = false;
-    quantityInput.value = '';
-
-    loadItems();
-  }
-
-  // Initial load of pantries
-  loadPantries();
-
+  // Default to home page
+  showSection('individual');
 </script>
 
 </body>
